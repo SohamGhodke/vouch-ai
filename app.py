@@ -47,21 +47,21 @@ CRITICAL COMPLIANCE CHECKLIST FOR INDIAN MEDIA (2026 STANDARDS):
    - YELLOW FLAG: Use of real people's names/photos without consent (Deepfake risk).
 """
 
-# --- UI LAYOUT ---
+# --- SMART AUTH (SECRETS + MANUAL FALLBACK) ---
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/shield.png", width=60)
     st.title("Vouch.ai")
-    st.markdown("### *The Liability Shield for Indian Media*")
-    st.markdown("---")
     
-    api_key = st.text_input("🔑 Enter Google API Key", type="password")
+    # Check if the key is hidden in the cloud (Secrets)
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        st.success("✅ Enterprise License Active")
+    else:
+        # Fallback for local testing if secrets aren't set
+        api_key = st.text_input("🔑 Enter Google API Key", type="password")
+
     if api_key:
         genai.configure(api_key=api_key)
-        st.success("System Authenticated")
-    else:
-        st.warning("Please enter your API Key to proceed.")
-        st.markdown("[Get Free Key](https://aistudio.google.com/)")
-
     st.markdown("---")
     st.info("💡 **Pro Tip:** This MVP uses Gemini 1.5 Flash (Free Tier).")
 
