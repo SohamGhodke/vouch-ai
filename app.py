@@ -109,7 +109,7 @@ if uploaded_file and api_key:
                     
                     # E. Select Model (Backend only - user doesn't see this)
                     # We use 1.5 Flash for speed and cost
-                    model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+                    model = genai.GenerativeModel(model_name="gemini-2.0-flash-lite-001")
 
                     # F. Generate
                     response = model.generate_content([prompt, video_file])
