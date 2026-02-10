@@ -26,7 +26,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/shield.png", width=60)
     st.title("Vouch.ai")
-    st.caption("v1.0.9 Stable")
+    st.caption("v1.1.0 Safety Mode")
     
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
@@ -65,7 +65,6 @@ if uploaded_file and api_key:
         with st.spinner("🕵️‍♂️ Analyzing visual & audio vectors..."):
             temp_filename = "temp_video.mp4"
             
-            # --- MAIN EXECUTION BLOCK ---
             try:
                 # A. Save file temporarily
                 with open(temp_filename, "wb") as f:
@@ -109,16 +108,16 @@ if uploaded_file and api_key:
                     If safe, state "No Compliance Violations Detected."
                     """
                     
-                    # E. MULTI-MODEL FALLBACK ENGINE
+                    # E. THE "SAFE LIST" (Guaranteed to exist)
                     models_to_try = [
-                        "gemini-1.5-flash",
-                        "gemini-2.0-flash", 
-                        "gemini-1.5-pro"
+                        "gemini-1.5-flash",       # Standard
+                        "gemini-1.5-flash-latest",# Latest Alias
+                        "gemini-pro"              # The Backup (Old but reliable)
                     ]
                     
                     response = None
-                    last_error = None
                     success_model = None
+                    last_error = None
 
                     # Loop through models until one works
                     for model_name in models_to_try:
