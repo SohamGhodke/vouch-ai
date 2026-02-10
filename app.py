@@ -3,7 +3,6 @@ import google.generativeai as genai
 import time
 from datetime import datetime
 import os
-from google.api_core import exceptions
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
@@ -12,7 +11,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- 2. CSS HACK (Hide Streamlit Branding) ---
+# --- 2. CSS HACK ---
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -22,11 +21,38 @@ hide_streamlit_style = """
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# --- 3. SIDEBAR & AUTH ---
+# --- 3. DYNAMIC MODEL FINDER (The Fix) ---
+def get_active_model():
+    """Finds a working model in your account instead of guessing."""
+    try:
+        # List all models available to your API key
+        all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Priority list (Try these first)
+        priorities = ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-2.0-flash']
+        
+        # 1. Check for priority models
+        for p in priorities:
+            if p in all_models:
+                return p
+        
+        # 2. If no priority model, take the first valid Gemini model
+        for m in all_models:
+            if "gemini" in m:
+                return m
+                
+        # 3. Absolute fallback
+        return "models/gemini-1.5-flash" 
+        
+    except Exception as e:
+        # Fallback if list_models fails (e.g., API key issue)
+        return "models/gemini-1.5-flash"
+
+# --- 4. SIDEBAR & AUTH ---
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/shield.png", width=60)
     st.title("Vouch.ai")
-    st.caption("v1.1.0 Safety Mode")
+    st.caption("v1.1.1 Auto-Discovery")
     
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
@@ -37,12 +63,12 @@ with st.sidebar:
         if api_key:
             genai.configure(api_key=api_key)
 
-# --- 4. MAIN INTERFACE ---
+# --- 5. MAIN INTERFACE ---
 st.title("⚖️ Vouch.ai")
 st.markdown("### Automated Legal & Compliance Audit")
 st.markdown("---")
 
-# --- 5. SAFETY SHIELD ---
+# --- 6. SAFETY SHIELD ---
 with st.expander("⚠️ LEGAL DISCLAIMER (READ FIRST)", expanded=True):
     st.warning(
         """
@@ -54,7 +80,7 @@ with st.expander("⚠️ LEGAL DISCLAIMER (READ FIRST)", expanded=True):
     )
     legal_agreement = st.checkbox("I acknowledge this is an automated draft analysis.")
 
-# --- 6. FILE UPLOADER ---
+# --- 7. FILE UPLOADER ---
 uploaded_file = st.file_uploader("Upload Media Asset (MP4, MOV)", type=['mp4', 'mov', 'avi'])
 
 if uploaded_file and api_key:
@@ -62,32 +88,36 @@ if uploaded_file and api_key:
     
     if st.button("🚀 Run Compliance Audit", disabled=not legal_agreement):
         
-        with st.spinner("🕵️‍♂️ Analyzing visual & audio vectors..."):
+        with st.spinner("🕵️‍♂️ Connecting to Compliance Engine..."):
             temp_filename = "temp_video.mp4"
             
             try:
-                # A. Save file temporarily
+                # A. FIND THE MODEL (The new logic)
+                active_model_name = get_active_model()
+                # st.toast(f"Connected to: {active_model_name}") # Debug message
+                
+                # B. Save file
                 with open(temp_filename, "wb") as f:
                     f.write(uploaded_file.read())
                 
-                # B. Upload to "The Vault" (Gemini)
+                # C. Upload to Vault
                 video_file = genai.upload_file(path=temp_filename)
                 
-                # C. Wait for processing (with timeout safety)
+                # D. Wait for processing
                 processing_time = 0
                 while video_file.state.name == "PROCESSING":
                     time.sleep(2)
                     processing_time += 2
                     video_file = genai.get_file(video_file.name)
                     if processing_time > 60:
-                        st.error("Time out: Video is taking too long to process on Google's servers.")
+                        st.error("Time out: Video processing took too long.")
                         break
 
                 if video_file.state.name == "FAILED":
-                    st.error("Error: Video processing failed. Please try a different format.")
+                    st.error("Error: Video processing failed.")
                 
                 else:
-                    # D. The "Lawyer" Prompt
+                    # E. The "Lawyer" Prompt
                     prompt = """
                     Act as a Senior Compliance Officer for the Indian Censor Board (CBFC). 
                     Analyze this video for legal risks under Indian Law.
@@ -108,54 +138,32 @@ if uploaded_file and api_key:
                     If safe, state "No Compliance Violations Detected."
                     """
                     
-                    # E. THE "SAFE LIST" (Guaranteed to exist)
-                    models_to_try = [
-                        "gemini-1.5-flash",       # Standard
-                        "gemini-1.5-flash-latest",# Latest Alias
-                        "gemini-pro"              # The Backup (Old but reliable)
-                    ]
+                    # F. GENERATE (Using the discovered model)
+                    model = genai.GenerativeModel(model_name=active_model_name)
+                    response = model.generate_content([prompt, video_file])
+
+                    # G. Display Report
+                    st.success(f"✅ Audit Complete (Engine: {active_model_name})")
+                    st.markdown("### 📋 Executive Summary")
+                    st.write(response.text)
                     
-                    response = None
-                    success_model = None
-                    last_error = None
-
-                    # Loop through models until one works
-                    for model_name in models_to_try:
-                        try:
-                            model = genai.GenerativeModel(model_name=model_name)
-                            response = model.generate_content([prompt, video_file])
-                            success_model = model_name
-                            break # Success! Exit the loop
-                        except Exception as e:
-                            last_error = e
-                            time.sleep(1)
-                            continue
-
-                    # F. Display Report
-                    if response:
-                        st.success(f"✅ Audit Complete (Engine: {success_model})")
-                        st.markdown("### 📋 Executive Summary")
-                        st.write(response.text)
-                        
-                        # Footer
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        audit_id = int(time.time())
-                        st.markdown("---")
-                        st.markdown(
-                            f"""
-                            <div style="text-align: center; color: #888; font-size: 12px; font-family: sans-serif;">
-                                <b>CONFIDENTIAL REPORT</b><br>
-                                Generated by Vouch.ai Compliance Engine v1.0<br>
-                                Timestamp: {timestamp} IST • Audit ID: #V{audit_id}
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        st.error(f"⚠️ System Busy. Please try again. (Details: {str(last_error)})")
+                    # Footer
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    audit_id = int(time.time())
+                    st.markdown("---")
+                    st.markdown(
+                        f"""
+                        <div style="text-align: center; color: #888; font-size: 12px; font-family: sans-serif;">
+                            <b>CONFIDENTIAL REPORT</b><br>
+                            Generated by Vouch.ai Compliance Engine v1.0<br>
+                            Timestamp: {timestamp} IST • Audit ID: #V{audit_id}
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
             except Exception as e:
-                st.error(f"Application Error: {str(e)}")
+                st.error(f"System Error: {str(e)}")
             
             # Cleanup
             finally:
